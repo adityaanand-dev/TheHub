@@ -1,8 +1,9 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+import os
 import sqlite3
-from typing import Optional, List
+from typing import Literal, Optional
 
 app = FastAPI(
     title="Creator Gig Marketplace API",
@@ -19,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_PATH = "database.db"
+DB_PATH = os.getenv("DATABASE_PATH", "database.db")
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -36,7 +37,8 @@ def init_db():
             title TEXT NOT NULL,
             category TEXT NOT NULL,
             rate REAL NOT NULL,
-            description TEXT NOT NULL
+            description TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
     cursor.execute("""
@@ -48,9 +50,28 @@ def init_db():
             requirements TEXT NOT NULL,
             status TEXT DEFAULT 'Pending',
             rejection_reason TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (gig_id) REFERENCES gigs(id)
         )
     """)
+    # Existing demo databases predate timestamps. Add the columns without
+    # discarding a creator's listings or client requests.
+    gig_columns = {row["name"] for row in cursor.execute("PRAGMA table_info(gigs)")}
+    booking_columns = {row["name"] for row in cursor.execute("PRAGMA table_info(bookings)")}
+    if "created_at" not in gig_columns:
+        cursor.execute("ALTER TABLE gigs ADD COLUMN created_at TEXT")
+        cursor.execute("UPDATE gigs SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
+    if "created_at" not in booking_columns:
+        cursor.execute("ALTER TABLE bookings ADD COLUMN created_at TEXT")
+        cursor.execute("UPDATE bookings SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
+    if "updated_at" not in booking_columns:
+        cursor.execute("ALTER TABLE bookings ADD COLUMN updated_at TEXT")
+        cursor.execute("UPDATE bookings SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL")
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gigs_category ON gigs(category)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_bookings_gig_id ON bookings(gig_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_bookings_client_email ON bookings(client_email)")
     conn.commit()
 
     # Seed sample gigs if empty so marketplace is never blank on initial launch
@@ -129,7 +150,7 @@ class BookingCreate(BaseModel):
     requirements: str = Field(..., min_length=1)
 
 class BookingStatusUpdate(BaseModel):
-    status: str
+    status: Literal["Accepted", "Declined"]
     rejection_reason: Optional[str] = None
 
 # --- API Endpoints ---
@@ -182,7 +203,7 @@ def post_gig(gig: GigCreate):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO gigs (creator_name, title, category, rate, description) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO gigs (creator_name, title, category, rate, description, created_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
         (gig.creator_name.strip(), gig.title.strip(), gig.category.strip(), gig.rate, gig.description.strip())
     )
     conn.commit()
@@ -220,8 +241,8 @@ def get_gigs(
     elif sort_by == "priciest":
         query += " ORDER BY rate DESC, id DESC"
     else:
-        # Default: Newest first
-        query += " ORDER BY id DESC"
+        # Default: newest first. This gives new creators a fair discovery path.
+        query += " ORDER BY datetime(created_at) DESC, id DESC"
 
     cursor.execute(query, params)
     gigs = [dict(row) for row in cursor.fetchall()]
@@ -256,8 +277,10 @@ def book_gig(booking: BookingCreate):
         raise HTTPException(status_code=404, detail=f"Gig ID {booking.gig_id} does not exist.")
 
     cursor.execute(
-        "INSERT INTO bookings (gig_id, client_name, client_email, requirements, status) VALUES (?, ?, ?, ?, 'Pending')",
-        (booking.gig_id, booking.client_name.strip(), booking.client_email.strip(), booking.requirements.strip())
+        """INSERT INTO bookings
+           (gig_id, client_name, client_email, requirements, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 'Pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
+        (booking.gig_id, booking.client_name.strip(), booking.client_email.strip().lower(), booking.requirements.strip())
     )
     conn.commit()
     booking_id = cursor.lastrowid
@@ -269,16 +292,21 @@ def book_gig(booking: BookingCreate):
     }
 
 @app.get("/api/creator/bookings")
-def get_creator_bookings():
+def get_creator_bookings(creator_name: Optional[str] = None):
     """Feature 4: Creator views incoming bookings."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("""
+    query = """
         SELECT b.*, g.title as gig_title, g.creator_name, g.category, g.rate 
         FROM bookings b 
         JOIN gigs g ON b.gig_id = g.id 
-        ORDER BY b.id DESC
-    """)
+    """
+    params = []
+    if creator_name and creator_name.strip():
+        query += " WHERE LOWER(g.creator_name) = LOWER(?)"
+        params.append(creator_name.strip())
+    query += " ORDER BY datetime(b.created_at) DESC, b.id DESC"
+    cursor.execute(query, params)
     bookings = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return bookings
@@ -292,21 +320,30 @@ def update_booking_status(booking_id: int, update: BookingStatusUpdate):
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM bookings WHERE id = ?", (booking_id,))
-    if not cursor.fetchone():
+    cursor.execute("SELECT status FROM bookings WHERE id = ?", (booking_id,))
+    existing_booking = cursor.fetchone()
+    if not existing_booking:
         conn.close()
         raise HTTPException(status_code=404, detail=f"Booking ID {booking_id} not found.")
 
+    if existing_booking["status"] != "Pending":
+        conn.close()
+        raise HTTPException(status_code=409, detail="Only pending bookings can be updated.")
+
+    reason = update.rejection_reason.strip() if update.rejection_reason else None
+    if update.status == "Accepted":
+        reason = None
+
     cursor.execute(
-        "UPDATE bookings SET status = ?, rejection_reason = ? WHERE id = ?",
-        (update.status, update.rejection_reason, booking_id)
+        "UPDATE bookings SET status = ?, rejection_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (update.status, reason, booking_id)
     )
     conn.commit()
     conn.close()
     return {"message": f"Booking status updated to {update.status}", "status": update.status}
 
 @app.get("/api/client/bookings")
-def get_client_bookings(client_name: Optional[str] = None):
+def get_client_bookings(client_name: Optional[str] = None, client_email: Optional[str] = None):
     """
     Feature 5: Client views their bookings and status (Pending, Accepted, Declined).
     """
@@ -318,7 +355,10 @@ def get_client_bookings(client_name: Optional[str] = None):
         JOIN gigs g ON b.gig_id = g.id 
     """
     params = []
-    if client_name:
+    if client_email and client_email.strip():
+        query += " WHERE LOWER(b.client_email) = LOWER(?)"
+        params.append(client_email.strip())
+    elif client_name:
         query += " WHERE LOWER(b.client_name) LIKE LOWER(?)"
         params.append(f"%{client_name.strip()}%")
     query += " ORDER BY b.id DESC"

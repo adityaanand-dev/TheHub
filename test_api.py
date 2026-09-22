@@ -2,7 +2,14 @@
 Automated Test Suite for Creator Gig Marketplace API
 Tests all 5 required features, validation, DP3 sorting, and stats.
 """
+import os
 import sys
+import tempfile
+from pathlib import Path
+
+# The test suite must never alter the marketplace data used by the running app.
+TEST_DB_PATH = Path(tempfile.gettempdir()) / f"thehub-api-test-{os.getpid()}.db"
+os.environ["DATABASE_PATH"] = str(TEST_DB_PATH)
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -122,6 +129,16 @@ def run_all_tests():
     assert res.status_code == 200
     print(f"✅ Booking #{booking_id_1} accepted.")
 
+    # Terminal statuses must not be overwritten by a second dashboard action.
+    res = client.patch(f"/api/bookings/{booking_id_1}", json={"status": "Declined"})
+    assert res.status_code == 409
+    print("✅ Accepted booking is protected from a conflicting second decision.")
+
+    # Only the three visible client states are allowed.
+    res = client.patch(f"/api/bookings/{booking_id_2}", json={"status": "Pending"})
+    assert res.status_code == 422
+    print("✅ Invalid booking status is rejected.")
+
     # Decline booking 2 with DP1 rejection reason
     res = client.patch(f"/api/bookings/{booking_id_2}", json={
         "status": "Declined",
@@ -137,6 +154,11 @@ def run_all_tests():
     assert len(b_acme) >= 1
     assert b_acme[0]["status"] == "Accepted"
     print("✅ Client view verified: Acme Brand has 'Accepted' booking.")
+
+    res = client.get("/api/client/bookings", params={"client_email": "brand@acme.com"})
+    assert res.status_code == 200
+    assert len(res.json()) == 1
+    print("✅ Client bookings can be scoped to a stable email identity.")
 
     res = client.get("/api/client/bookings", params={"client_name": "Nova Tech"})
     assert res.status_code == 200
@@ -158,4 +180,7 @@ def run_all_tests():
     print("\n🎉 ALL 9 AUTOMATED TESTS PASSED SUCCESSFULLY! 100% READY FOR GRADING.")
 
 if __name__ == "__main__":
-    run_all_tests()
+    try:
+        run_all_tests()
+    finally:
+        TEST_DB_PATH.unlink(missing_ok=True)

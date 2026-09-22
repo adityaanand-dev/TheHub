@@ -562,6 +562,8 @@ def render_client_app():
 
     with client_tabs[0]:
         st.header("Marketplace")
+        if st.session_state.get("rebook_brief"):
+            st.info("Your previous project brief is ready to use. Choose another creator and submit when ready.")
         filter_col1, filter_col2, filter_col3 = st.columns([1.5, 2, 1.5])
         with filter_col1:
             category_choice = st.selectbox("Filter Category", ["All", "Video & UGC", "Design & Graphics", "Writing & Translation", "Tech & AI"])
@@ -601,9 +603,13 @@ def render_client_app():
                             st.caption("Fast turnaround")
                             with st.popover("Book this gig", use_container_width=True):
                                 st.write(f"Project for: **{gig['title']}**")
-                                client_name = st.text_input("Your name", key=f"client_name_{gig['id']}")
-                                client_email = st.text_input("Email", key=f"client_email_{gig['id']}")
-                                brief = st.text_area("Project requirements", key=f"client_brief_{gig['id']}")
+                                client_name = st.text_input("Your name", value=st.session_state.get("user_name", ""), key=f"client_name_{gig['id']}")
+                                client_email = st.text_input("Email", value=st.session_state.get("user_email", ""), key=f"client_email_{gig['id']}")
+                                brief = st.text_area(
+                                    "Project requirements",
+                                    value=st.session_state.get("rebook_brief", ""),
+                                    key=f"client_brief_{gig['id']}",
+                                )
                                 if st.button("Submit booking", key=f"booking_{gig['id']}", type="primary", use_container_width=True):
                                     if not client_name.strip() or not client_email.strip() or not brief.strip():
                                         st.error("Please complete the booking details.")
@@ -628,11 +634,11 @@ def render_client_app():
 
     with client_tabs[1]:
         st.header("My Bookings")
-        client_name_query = st.text_input("Filter by your name", value=st.session_state.get("active_client", ""))
+        client_name_query = st.text_input("Your name", value=st.session_state.get("user_name", ""), disabled=True)
         try:
             params = {}
-            if client_name_query.strip():
-                params["client_name"] = client_name_query.strip()
+            # Email is the stable identity; names alone can be shared by clients.
+            params["client_email"] = st.session_state.get("user_email", "")
             res = requests.get(f"{API_BASE}/client/bookings", params=params, timeout=5)
             if res.status_code == 200:
                 bookings = res.json()
@@ -647,9 +653,14 @@ def render_client_app():
                         if booking["status"] == "Accepted":
                             st.success("Accepted")
                         elif booking["status"] == "Declined":
-                            st.error("Declined")
+                            st.error("Booking declined")
                             if booking.get("rejection_reason"):
                                 st.info(f"Reason: {booking['rejection_reason']}")
+                            else:
+                                st.caption("The creator did not provide a reason.")
+                            if st.button("Use this brief to book another creator", key=f"client_rebook_{booking['id']}"):
+                                st.session_state["rebook_brief"] = booking["requirements"]
+                                st.toast("Brief saved. Choose an alternative creator in Browse Gigs.", icon="🔄")
                         else:
                             st.warning("Pending review")
                         st.markdown("</div>", unsafe_allow_html=True)
@@ -878,7 +889,12 @@ with tabs[1]:
 
     with post_col:
         with st.form("new_gig_form", clear_on_submit=True):
-            f_creator = st.text_input("Creator / Handle Name", placeholder="e.g. Maya Chen, DevStudio")
+            f_creator = st.text_input(
+                "Creator / Handle Name",
+                value=st.session_state.get("user_name", ""),
+                disabled=True,
+                help="Listings are published under the signed-in creator account.",
+            )
             f_title = st.text_input("Gig Title", placeholder="e.g. 4K TikTok UGC Video Ads")
             f_cat = st.selectbox("Category", ["Video & UGC", "Design & Graphics", "Writing & Translation", "Tech & AI"])
             f_rate = st.number_input("Rate in USD ($)", min_value=1.0, value=75.0, step=5.0)
@@ -927,7 +943,11 @@ with tabs[2]:
     st.write("Manage client project requests. Accept inquiries or decline with constructive feedback.")
 
     try:
-        c_res = requests.get(f"{API_BASE}/creator/bookings", timeout=5)
+        c_res = requests.get(
+            f"{API_BASE}/creator/bookings",
+            params={"creator_name": st.session_state.get("user_name", "")},
+            timeout=5,
+        )
         if c_res.status_code == 200:
             c_bookings = c_res.json()
             if not c_bookings:
