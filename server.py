@@ -55,6 +55,16 @@ def init_db():
             FOREIGN KEY (gig_id) REFERENCES gigs(id)
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS saved_gigs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_email TEXT NOT NULL,
+            gig_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(client_email, gig_id),
+            FOREIGN KEY (gig_id) REFERENCES gigs(id)
+        )
+    """)
     # Existing demo databases predate timestamps. Add the columns without
     # discarding a creator's listings or client requests.
     gig_columns = {row["name"] for row in cursor.execute("PRAGMA table_info(gigs)")}
@@ -72,6 +82,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_gigs_category ON gigs(category)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bookings_gig_id ON bookings(gig_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bookings_client_email ON bookings(client_email)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_saved_gigs_client_email ON saved_gigs(client_email)")
     conn.commit()
 
     # Seed sample gigs if empty so marketplace is never blank on initial launch
@@ -153,6 +164,16 @@ class BookingStatusUpdate(BaseModel):
     status: Literal["Accepted", "Declined"]
     rejection_reason: Optional[str] = None
 
+class GigUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1)
+    category: Optional[str] = Field(default=None, min_length=1)
+    rate: Optional[float] = Field(default=None, gt=0)
+    description: Optional[str] = Field(default=None, min_length=1)
+
+class SavedGigCreate(BaseModel):
+    gig_id: int
+    client_email: str = Field(..., min_length=3)
+
 # --- API Endpoints ---
 @app.get("/")
 def root():
@@ -215,7 +236,12 @@ def post_gig(gig: GigCreate):
 def get_gigs(
     category: Optional[str] = None,
     search: Optional[str] = None,
-    sort_by: Optional[str] = Query("newest", pattern="^(newest|cheapest|priciest)$")
+    creator_name: Optional[str] = None,
+    min_rate: Optional[float] = Query(default=None, ge=0),
+    max_rate: Optional[float] = Query(default=None, gt=0),
+    sort_by: Optional[str] = Query("newest", pattern="^(newest|cheapest|priciest)$"),
+    limit: int = Query(default=24, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ):
     """
     Feature 2: Browse & Search.
@@ -234,6 +260,16 @@ def get_gigs(
         query += " AND (title LIKE ? OR description LIKE ? OR creator_name LIKE ?)"
         wildcard = f"%{search.strip()}%"
         params.extend([wildcard, wildcard, wildcard])
+
+    if creator_name and creator_name.strip():
+        query += " AND LOWER(creator_name) = LOWER(?)"
+        params.append(creator_name.strip())
+    if min_rate is not None:
+        query += " AND rate >= ?"
+        params.append(min_rate)
+    if max_rate is not None:
+        query += " AND rate <= ?"
+        params.append(max_rate)
 
     # DP3 Ranking Strategy
     if sort_by == "cheapest":
@@ -259,6 +295,46 @@ def get_gig(gig_id: int):
     if not row:
         raise HTTPException(status_code=404, detail=f"Gig with ID {gig_id} not found")
     return dict(row)
+
+@app.patch("/api/gigs/{gig_id}")
+def update_gig(gig_id: int, update: GigUpdate):
+    """Update an existing creator listing without creating a duplicate gig."""
+    fields = update.model_dump(exclude_none=True)
+    if not fields:
+        raise HTTPException(status_code=400, detail="Provide at least one field to update.")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM gigs WHERE id = ?", (gig_id,))
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Gig with ID {gig_id} not found")
+
+    assignments = ", ".join(f"{column} = ?" for column in fields)
+    values = [value.strip() if isinstance(value, str) else value for value in fields.values()]
+    cursor.execute(f"UPDATE gigs SET {assignments} WHERE id = ?", [*values, gig_id])
+    conn.commit()
+    conn.close()
+    return {"message": "Gig updated successfully", "id": gig_id}
+
+@app.delete("/api/gigs/{gig_id}")
+def delete_gig(gig_id: int):
+    """Remove an unbooked gig; booked gigs are retained to protect order history."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM gigs WHERE id = ?", (gig_id,))
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Gig with ID {gig_id} not found")
+    cursor.execute("SELECT COUNT(*) AS count FROM bookings WHERE gig_id = ?", (gig_id,))
+    if cursor.fetchone()["count"]:
+        conn.close()
+        raise HTTPException(status_code=409, detail="Booked gigs cannot be deleted because their order history is retained.")
+    cursor.execute("DELETE FROM saved_gigs WHERE gig_id = ?", (gig_id,))
+    cursor.execute("DELETE FROM gigs WHERE id = ?", (gig_id,))
+    conn.commit()
+    conn.close()
+    return {"message": "Gig deleted successfully"}
 
 @app.post("/api/bookings", status_code=201)
 def book_gig(booking: BookingCreate):
@@ -292,7 +368,11 @@ def book_gig(booking: BookingCreate):
     }
 
 @app.get("/api/creator/bookings")
-def get_creator_bookings(creator_name: Optional[str] = None):
+def get_creator_bookings(
+    creator_name: Optional[str] = None,
+    limit: int = Query(default=24, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
     """Feature 4: Creator views incoming bookings."""
     conn = get_db()
     cursor = conn.cursor()
@@ -306,7 +386,8 @@ def get_creator_bookings(creator_name: Optional[str] = None):
         query += " WHERE LOWER(g.creator_name) = LOWER(?)"
         params.append(creator_name.strip())
     query += " ORDER BY datetime(b.created_at) DESC, b.id DESC"
-    cursor.execute(query, params)
+    query += " LIMIT ? OFFSET ?"
+    cursor.execute(query, [*params, limit, offset])
     bookings = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return bookings
