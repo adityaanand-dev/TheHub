@@ -1,6 +1,6 @@
 # Creator Gig Marketplace - Code2Career AI Hackathon 2026
 
-**Hackathon ID:** YOUR_HACKATHON_ID_HERE
+**Hackathon ID:** 	AZIS-72KJSK
 **Track:** Track 2 - Real-World AI Products (Option 1: Creator Gig Marketplace)
 **Tech Stack:** Python, FastAPI, Streamlit, SQLite
 

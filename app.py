@@ -12,125 +12,45 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-if "theme" not in st.session_state:
-    st.session_state["theme"] = "dark"
-
-
-def apply_theme_css():
-    theme = st.session_state.get("theme", "dark")
-    if theme == "dark":
-        bg = "#0b1020"
-        bg_alt = "#111827"
-        panel = "rgba(15, 23, 42, 0.82)"
-        panel_soft = "rgba(15, 23, 42, 0.66)"
-        text = "#e5eefb"
-        text_soft = "#cbd5e1"
-        line = "rgba(148, 163, 184, 0.2)"
-        input_bg = "rgba(15,23,42,0.72)"
-        button_bg = "rgba(15, 23, 42, 0.8)"
-        accent_1 = "#8b5cf6"
-        accent_2 = "#60a5fa"
-    else:
-        bg = "#f3f6fb"
-        bg_alt = "#edf2ff"
-        panel = "rgba(255, 255, 255, 0.9)"
-        panel_soft = "rgba(255, 255, 255, 0.72)"
-        text = "#111827"
-        text_soft = "#475569"
-        line = "rgba(148, 163, 184, 0.35)"
-        input_bg = "rgba(255,255,255,0.82)"
-        button_bg = "rgba(255,255,255,0.9)"
-        accent_1 = "#7c3aed"
-        accent_2 = "#2563eb"
-
-    st.markdown(
-        f"""
-        <style>
-            :root {{
-                --app-bg: {bg};
-                --app-bg-alt: {bg_alt};
-                --app-panel: {panel};
-                --app-panel-soft: {panel_soft};
-                --app-text: {text};
-                --app-text-soft: {text_soft};
-                --app-line: {line};
-                --app-input-bg: {input_bg};
-                --app-button-bg: {button_bg};
-            }}
-            html, body, [data-testid="stAppViewContainer"] {{
-                background: linear-gradient(180deg, var(--app-bg) 0%, var(--app-bg-alt) 100%);
-                color: var(--app-text);
-            }}
-            .stApp {{ background: transparent; }}
-            .block-container {{ max-width: 1380px; padding-top: 2rem; padding-bottom: 2rem; }}
-            [data-testid="stHeader"] {{ background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(8px); }}
-            .brand-shell {{
-                background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(14,165,233,0.10));
-                border: 1px solid {line};
-                border-radius: 22px;
-                padding: 1.2rem 1.3rem;
-                margin-bottom: 1rem;
-                box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
-            }}
-            .brand-badge {{
-                display: inline-flex; align-items: center; gap: 0.5rem;
-                background: rgba(255,255,255,0.06);
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 999px; padding: 0.45rem 0.8rem; font-size: 0.72rem; font-weight: 700;
-                text-transform: uppercase; letter-spacing: 0.12em; color: #c4b5fd;
-            }}
-            .hero-title {{ margin-top: 0.55rem; margin-bottom: 0.2rem; font-size: clamp(2.1rem, 4vw, 3.5rem); font-weight: 900; letter-spacing: -0.06em; line-height: 1.02; color: {text}; }}
-            .hero-subtitle {{ margin: 0; color: {text_soft}; font-size: 1.02rem; max-width: 760px; line-height: 1.6; }}
-            .status-chip {{
-                display: inline-flex; align-items: center; justify-content: center; width: 100%;
-                padding: 0.72rem 0.9rem; border-radius: 16px; font-weight: 700;
-                background: rgba(15, 118, 110, 0.12); border: 1px solid rgba(45, 212, 191, 0.25); color: #a7f3d0;
-                box-shadow: 0 16px 30px rgba(16, 185, 129, 0.12);
-            }}
-            .status-chip.offline {{ background: rgba(127, 29, 29, 0.18); border-color: rgba(248, 113, 113, 0.18); color: #fecaca; }}
-            .metric-card {{
-                background: linear-gradient(180deg, {panel}, {panel_soft}); border: 1px solid {line}; border-radius: 18px; padding: 1rem 1.1rem; box-shadow: 0 18px 35px rgba(15, 23, 42, 0.12); min-height: 120px;
-            }}
-            [data-testid="stMetricValue"] {{ font-size: 1.65rem !important; font-weight: 800 !important; color: {text}; }}
-            [data-testid="stMetricLabel"] {{ color: {text_soft} !important; font-weight: 600 !important; letter-spacing: 0.01em; }}
-            .badge-video {{ background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: #fff; padding: 0.38rem 0.8rem; border-radius: 9999px; font-size: 0.76rem; font-weight: 700; display: inline-block; letter-spacing: 0.01em; box-shadow: 0 12px 25px rgba(124, 58, 237, 0.26); }}
-            .badge-design {{ background: linear-gradient(135deg, #ec4899, #f43f5e); color: white; padding: 0.38rem 0.8rem; border-radius: 9999px; font-size: 0.76rem; font-weight: 700; display: inline-block; letter-spacing: 0.01em; box-shadow: 0 12px 25px rgba(236, 72, 153, 0.20); }}
-            .badge-writing {{ background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 0.38rem 0.8rem; border-radius: 9999px; font-size: 0.76rem; font-weight: 700; display: inline-block; letter-spacing: 0.01em; box-shadow: 0 12px 25px rgba(16, 185, 129, 0.22); }}
-            .badge-tech {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 0.38rem 0.8rem; border-radius: 9999px; font-size: 0.76rem; font-weight: 700; display: inline-block; letter-spacing: 0.01em; box-shadow: 0 12px 25px rgba(59, 130, 246, 0.22); }}
-            .rate-pill {{ font-size: 1.7rem; font-weight: 900; color: #34d399; letter-spacing: -0.05em; line-height: 1; }}
-            .gig-card {{
-                background: linear-gradient(180deg, {panel}, {panel_soft}); border: 1px solid {line}; border-radius: 22px; padding: 1.25rem; box-shadow: 0 18px 35px rgba(15,23,42,0.12); margin-bottom: 1rem;
-            }}
-            .feature-panel {{ background: linear-gradient(180deg, {panel}, {panel_soft}); border: 1px solid {line}; border-radius: 18px; padding: 1rem 1.1rem; margin-top: 0.5rem; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12); }}
-            .mini-label {{ display: inline-block; margin-bottom: 0.5rem; color: #a5b4fc; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }}
-            .stTabs [role="tablist"] {{ gap: 0.6rem; }}
-            .stTabs [role="tab"] {{ border-radius: 12px 12px 0 0; background: rgba(15,23,42,0.2); border: 1px solid {line}; padding: 0.6rem 1rem; color: {text}; font-weight: 600; }}
-            .stTabs [role="tab"][aria-selected="true"] {{ background: linear-gradient(135deg, rgba(139,92,246,0.20), rgba(59,130,246,0.20)); border-color: rgba(165,180,252,0.3); color: {text}; }}
-            .stTextInput > div > div > input, .stNumberInput > div > div > input, .stSelectbox > div > div, .stTextArea > div > div > textarea {{ background: {input_bg}; border: 1px solid {line}; color: {text}; border-radius: 12px; }}
-            .stTextInput label, .stNumberInput label, .stSelectbox label, .stTextArea label {{ color: {text} !important; font-weight: 600 !important; }}
-            .stPopover > button {{ background: {button_bg} !important; border: 1px solid {line} !important; color: {text} !important; border-radius: 12px !important; }}
-            .stButton > button {{ background: linear-gradient(135deg, {accent_1}, {accent_2}) !important; color: white !important; border: none !important; }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_theme_toggle():
-    theme = st.session_state.get("theme", "dark")
-    selected = st.radio("Theme", ["Dark", "Light"], index=0 if theme == "dark" else 1, horizontal=True, key="theme_choice")
-    st.session_state["theme"] = "dark" if selected == "Dark" else "light"
-
-
-# --- Custom Styling (Premium Creator Marketplace Theme) ---
+# --- Custom Styling ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
+    :root {
+        --app-bg: #070b16;
+        --app-bg-alt: #1017;
+        --app-panel: #111b2e;
+        --app-panel-soft: #172238;
+        --app-text: #f8fafc;
+        --app-text-soft: #cbd5e1;
+        --app-muted: #94a3b8;
+        --app-line: rgba(148, 163, 184, 0.24);
+        --app-input: #0d1627;
+    }
+
     html, body, [data-testid="stAppViewContainer"] {
         font-family: 'Inter', sans-serif;
-        background: var(--app-bg, #0b1020);
-        color: var(--app-text, #e5eefb);
+        background: linear-gradient(145deg, var(--app-bg) 0%, var(--app-bg-alt) 100%);
+        color: var(--app-text);
+    }
+
+    body, .stApp, [data-testid="stAppViewContainer"] {
+        color: var(--app-text) !important;
+    }
+
+    h1, h2, h3, h4, h5, h6,
+    [data-testid="stMarkdownContainer"] strong {
+        color: var(--app-text) !important;
+    }
+
+    p, li, [data-testid="stCaptionContainer"],
+    [data-testid="stMarkdownContainer"] {
+        color: var(--app-text-soft);
+    }
+
+    [data-testid="stCaptionContainer"] {
+        color: var(--app-muted) !important;
     }
 
     .stApp {
@@ -351,15 +271,30 @@ st.markdown("""
     .stNumberInput > div > div > input,
     .stSelectbox > div > div,
     .stTextArea > div > div > textarea {
-        background: rgba(15,23,42,0.72);
-        border: 1px solid rgba(148,163,184,0.2);
-        color: #f1f5f9;
+        background: var(--app-input) !important;
+        border: 1px solid var(--app-line);
+        color: var(--app-text) !important;
         border-radius: 12px;
     }
 
     .stTextInput label, .stNumberInput label, .stSelectbox label, .stTextArea label {
-        color: var(--app-text, #dfe7f5) !important;
+        color: var(--app-text) !important;
         font-weight: 600 !important;
+    }
+
+    input::placeholder, textarea::placeholder {
+        color: #94a3b8 !important;
+        opacity: 1 !important;
+    }
+
+    [data-baseweb="select"] * {
+        color: var(--app-text) !important;
+    }
+
+    [data-testid="stRadio"] label,
+    [data-testid="stCheckbox"] label,
+    [data-testid="stExpander"] summary {
+        color: var(--app-text) !important;
     }
 
     .stPopover > button {
@@ -376,6 +311,58 @@ st.markdown("""
         padding: 1rem 1.1rem;
         margin-top: 0.5rem;
         box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
+    }
+
+    .login-hero {
+        min-height: 390px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        background:
+            radial-gradient(circle at 15% 20%, rgba(139,92,246,0.28), transparent 36%),
+            linear-gradient(145deg, rgba(30,41,59,0.96), rgba(15,23,42,0.82));
+        border: 1px solid rgba(148,163,184,0.18);
+        border-radius: 28px;
+        padding: 2rem;
+        box-shadow: 0 24px 60px rgba(2,6,23,0.28);
+    }
+
+    .login-card {
+        min-height: 390px;
+        background: rgba(15,23,42,0.78);
+        border: 1px solid rgba(148,163,184,0.18);
+        border-radius: 28px;
+        padding: 1.5rem;
+        box-shadow: 0 24px 60px rgba(2,6,23,0.28);
+    }
+
+    .login-stat {
+        display: inline-flex;
+        flex-direction: column;
+        min-width: 120px;
+        padding: 0.85rem 1rem;
+        border: 1px solid rgba(148,163,184,0.16);
+        border-radius: 16px;
+        background: rgba(255,255,255,0.06);
+    }
+
+    .workspace-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1rem;
+        border: 1px solid rgba(148,163,184,0.16);
+        border-radius: 16px;
+        background: rgba(15,23,42,0.58);
+    }
+
+    .workspace-role {
+        color: #c4b5fd;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
     }
 
     .mini-label {
@@ -408,35 +395,53 @@ def get_category_badge(category: str) -> str:
 
 
 def clear_session():
-    for key in ["logged_in", "user_role", "user_name", "user_email"]:
+    for key in [
+        "logged_in",
+        "user_role",
+        "user_name",
+        "user_email",
+        "active_client",
+        "prefill_client_name",
+        "prefill_client_email",
+        "prefill_reqs",
+    ]:
         st.session_state.pop(key, None)
 
 
 def render_login():
-    render_theme_toggle()
-    st.markdown(
-        """
-        <div class="brand-shell">
-            <div class="brand-badge">🔐 Secure access</div>
-            <div class="hero-title">Welcome to TheHub</div>
-            <p class="hero-subtitle">Sign in as a creator or client to access the correct workspace.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    hero_col, form_col = st.columns([1.15, 0.85], gap="large")
+    with hero_col:
+        st.markdown(
+            """
+            <div class="login-hero">
+                <div class="brand-badge">✨ TheHub workspace</div>
+                <div class="hero-title">Make good work easier to find.</div>
+                <p class="hero-subtitle">A focused marketplace where creators publish their craft and clients move great ideas forward.</p>
+                <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-top:1.6rem;">
+                    <span class="login-stat"><strong>Creators</strong><small>Showcase your edge</small></span>
+                    <span class="login-stat"><strong>Clients</strong><small>Book with clarity</small></span>
+                    <span class="login-stat"><strong>Projects</strong><small>Stay in sync</small></span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    demo_accounts = {
-        "creator@thehub.com": {"password": "creator123", "role": "creator", "name": "Alex Rivera"},
-        "client@thehub.com": {"password": "client123", "role": "client", "name": "Ava Johnson"},
-    }
+    with form_col:
+        st.markdown("<div class='login-card'>", unsafe_allow_html=True)
+        st.subheader("Sign in to continue")
+        st.caption("Choose the workspace that matches how you work today.")
 
-    selected_role = st.radio("I am signing in as a", ["Creator", "Client"], horizontal=True)
-    email = st.text_input("Email address", placeholder="creator@thehub.com")
-    password = st.text_input("Password", type="password", placeholder="Enter password")
+        demo_accounts = {
+            "creator@thehub.com": {"password": "creator123", "role": "creator", "name": "Alex Rivera"},
+            "client@thehub.com": {"password": "client123", "role": "client", "name": "Ava Johnson"},
+        }
 
-    c1, c2, c3 = st.columns([1, 1, 1])
-    with c1:
-        if st.button("Login", type="primary", use_container_width=True):
+        selected_role = st.radio("I am signing in as a", ["Creator", "Client"], horizontal=True)
+        email = st.text_input("Email address", placeholder="creator@thehub.com")
+        password = st.text_input("Password", type="password", placeholder="Enter password")
+
+        if st.button("Sign in", type="primary", use_container_width=True):
             account = demo_accounts.get(email.strip().lower())
             if account and account["password"] == password and account["role"] == selected_role.lower():
                 st.session_state["logged_in"] = True
@@ -447,33 +452,41 @@ def render_login():
             else:
                 st.error("Invalid email, password, or role selection.")
 
-    with c2:
-        if st.button("Use Demo Creator", use_container_width=True):
-            st.session_state["logged_in"] = True
-            st.session_state["user_role"] = "creator"
-            st.session_state["user_name"] = "Alex Rivera"
-            st.session_state["user_email"] = "creator@thehub.com"
-            st.rerun()
+        demo_creator, demo_client = st.columns(2)
+        with demo_creator:
+            if st.button("Demo Creator", use_container_width=True):
+                st.session_state["logged_in"] = True
+                st.session_state["user_role"] = "creator"
+                st.session_state["user_name"] = "Alex Rivera"
+                st.session_state["user_email"] = "creator@thehub.com"
+                st.rerun()
 
-    with c3:
-        if st.button("Use Demo Client", use_container_width=True):
-            st.session_state["logged_in"] = True
-            st.session_state["user_role"] = "client"
-            st.session_state["user_name"] = "Ava Johnson"
-            st.session_state["user_email"] = "client@thehub.com"
-            st.rerun()
+        with demo_client:
+            if st.button("Demo Client", use_container_width=True):
+                st.session_state["logged_in"] = True
+                st.session_state["user_role"] = "client"
+                st.session_state["user_name"] = "Ava Johnson"
+                st.session_state["user_email"] = "client@thehub.com"
+                st.rerun()
 
-    st.markdown("<div class='feature-panel'>", unsafe_allow_html=True)
-    st.write("Demo credentials")
-    st.code("Creator: creator@thehub.com / creator123\nClient: client@thehub.com / client123")
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("<div class='feature-panel'>", unsafe_allow_html=True)
+        st.caption("Demo access")
+        st.code("Creator  creator@thehub.com  /  creator123\nClient   client@thehub.com   /  client123")
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_client_app():
-    render_theme_toggle()
-    if st.button("Logout"):
-        clear_session()
-        st.rerun()
+    account_col, action_col = st.columns([4, 1])
+    with account_col:
+        st.markdown(
+            f"<div class='workspace-bar'><span class='workspace-role'>Client workspace</span><span>{st.session_state.get('user_name', 'Client')}</span><small>{st.session_state.get('user_email', '')}</small></div>",
+            unsafe_allow_html=True,
+        )
+    with action_col:
+        if st.button("Logout", key="client_logout", use_container_width=True):
+            clear_session()
+            st.rerun()
 
     st.markdown(
         """
@@ -529,9 +542,21 @@ def render_client_app():
                             st.caption("Fast turnaround")
                             with st.popover("Book this gig", use_container_width=True):
                                 st.write(f"Project for: **{gig['title']}**")
-                                client_name = st.text_input("Your name", key=f"client_name_{gig['id']}")
-                                client_email = st.text_input("Email", key=f"client_email_{gig['id']}")
-                                brief = st.text_area("Project requirements", key=f"client_brief_{gig['id']}")
+                                client_name = st.text_input(
+                                    "Your name",
+                                    value=st.session_state.get("prefill_client_name", st.session_state.get("user_name", "")),
+                                    key=f"client_name_{gig['id']}"
+                                )
+                                client_email = st.text_input(
+                                    "Email",
+                                    value=st.session_state.get("prefill_client_email", st.session_state.get("user_email", "")),
+                                    key=f"client_email_{gig['id']}"
+                                )
+                                brief = st.text_area(
+                                    "Project requirements",
+                                    value=st.session_state.get("prefill_reqs", ""),
+                                    key=f"client_brief_{gig['id']}"
+                                )
                                 if st.button("Submit booking", key=f"booking_{gig['id']}", type="primary", use_container_width=True):
                                     if not client_name.strip() or not client_email.strip() or not brief.strip():
                                         st.error("Please complete the booking details.")
@@ -546,6 +571,8 @@ def render_client_app():
                                         if res.status_code in [200, 201]:
                                             st.success("Booking sent successfully.")
                                             st.session_state["active_client"] = client_name.strip()
+                                            for key in ["prefill_client_name", "prefill_client_email", "prefill_reqs"]:
+                                                st.session_state.pop(key, None)
                                         else:
                                             st.error(f"Booking failed: {res.text}")
                         st.markdown("</div>", unsafe_allow_html=True)
@@ -558,9 +585,9 @@ def render_client_app():
         st.header("My Bookings")
         client_name_query = st.text_input("Filter by your name", value=st.session_state.get("active_client", ""))
         try:
-            params = {}
-            if client_name_query.strip():
-                params["client_name"] = client_name_query.strip()
+            params = {"client_email": st.session_state.get("user_email", "")}
+            if not params["client_email"] and client_name_query.strip():
+                params = {"client_name": client_name_query.strip()}
             res = requests.get(f"{API_BASE}/client/bookings", params=params, timeout=5)
             if res.status_code == 200:
                 bookings = res.json()
@@ -578,6 +605,15 @@ def render_client_app():
                             st.error("Declined")
                             if booking.get("rejection_reason"):
                                 st.info(f"Reason: {booking['rejection_reason']}")
+                            if st.button(
+                                "Re-book with another creator",
+                                key=f"client_rebook_{booking['id']}",
+                                use_container_width=True,
+                            ):
+                                st.session_state["prefill_client_name"] = booking["client_name"]
+                                st.session_state["prefill_client_email"] = booking["client_email"]
+                                st.session_state["prefill_reqs"] = booking["requirements"]
+                                st.toast("Your details are ready. Choose another creator in Browse Gigs.")
                         else:
                             st.warning("Pending review")
                         st.markdown("</div>", unsafe_allow_html=True)
@@ -599,8 +635,6 @@ def render_client_app():
         )
 
 
-apply_theme_css()
-
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 
@@ -612,10 +646,18 @@ if st.session_state.get("user_role") != "creator":
     render_client_app()
     st.stop()
 
-apply_theme_css()
-
 # --- Header & Live Stats Bar ---
-render_theme_toggle()
+account_col, action_col = st.columns([4, 1])
+with account_col:
+    st.markdown(
+        f"<div class='workspace-bar'><span class='workspace-role'>Creator workspace</span><span>{st.session_state.get('user_name', 'Creator')}</span><small>{st.session_state.get('user_email', '')}</small></div>",
+        unsafe_allow_html=True,
+    )
+with action_col:
+    if st.button("Logout", key="creator_logout", use_container_width=True):
+        clear_session()
+        st.rerun()
+
 col_title, col_status = st.columns([3.2, 1.0], gap="medium")
 with col_title:
     st.markdown(
@@ -673,17 +715,14 @@ st.divider()
 
 # --- Main Navigation Tabs ---
 tabs = st.tabs([
-    "🛒 Marketplace (Browse & Book)",
     "➕ Post a Gig",
-    "📊 Creator Dashboard",
-    "📋 My Bookings",
-    "💡 Decision Points (DP1-DP3)"
+    "📊 Creator Dashboard"
 ])
 
 # ==============================================================================
-# TAB 1: BROWSE & BOOK (Features 2 & 3 + DP3 Sorting)
+# TAB 1: CREATOR-ONLY MARKETPLACE DISABLED
 # ==============================================================================
-with tabs[0]:
+if False:
     st.header("Browse Creator Gigs")
     st.write("Discover verified services from top young talent or book tailored creative work.")
 
@@ -791,7 +830,7 @@ with tabs[0]:
 # ==============================================================================
 # TAB 2: POST A GIG (Feature 1)
 # ==============================================================================
-with tabs[1]:
+with tabs[0]:
     st.header("List Your Creator Skill")
     st.write("Fill out the listing form below to publish your gig on the live marketplace.")
 
@@ -799,7 +838,11 @@ with tabs[1]:
 
     with post_col:
         with st.form("new_gig_form", clear_on_submit=True):
-            f_creator = st.text_input("Creator / Handle Name", placeholder="e.g. Maya Chen, DevStudio")
+            f_creator = st.text_input(
+                "Creator / Handle Name",
+                value=st.session_state.get("user_name", ""),
+                placeholder="e.g. Maya Chen, DevStudio"
+            )
             f_title = st.text_input("Gig Title", placeholder="e.g. 4K TikTok UGC Video Ads")
             f_cat = st.selectbox("Category", ["Video & UGC", "Design & Graphics", "Writing & Translation", "Tech & AI"])
             f_rate = st.number_input("Rate in USD ($)", min_value=1.0, value=75.0, step=5.0)
@@ -843,9 +886,16 @@ with tabs[1]:
 # ==============================================================================
 # TAB 3: CREATOR DASHBOARD (Feature 4 & DP2)
 # ==============================================================================
-with tabs[2]:
+with tabs[1]:
     st.header("Creator Booking Inquiries")
     st.write("Manage client project requests. Accept inquiries or decline with constructive feedback.")
+
+    refresh_col, hint_col = st.columns([1, 3])
+    with refresh_col:
+        if st.button("Refresh inbox", use_container_width=True):
+            st.rerun()
+    with hint_col:
+        st.caption("New client requests appear here as soon as they are submitted.")
 
     try:
         c_res = requests.get(f"{API_BASE}/creator/bookings", timeout=5)
@@ -925,7 +975,7 @@ with tabs[2]:
 # ==============================================================================
 # TAB 4: MY BOOKINGS (Feature 5 & DP1 Re-booking)
 # ==============================================================================
-with tabs[3]:
+if False:
     st.header("Client Order Tracker")
     st.write("Track the progress of your booked services across all creators in real time.")
 
@@ -984,9 +1034,9 @@ with tabs[3]:
         st.error(f"Error connecting to bookings service: {str(e)}")
 
 # ==============================================================================
-# TAB 5: DECISION POINTS (DP1, DP2, DP3)
+# Architecture notes are kept out of the creator workspace.
 # ==============================================================================
-with tabs[4]:
+if False:
     st.header("Architecture & Decision Points Rationale")
     st.caption("Detailed breakdown for Hackathon Judges and Graders (20 Points Criteria)")
 
