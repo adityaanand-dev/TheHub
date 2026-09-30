@@ -1,0 +1,163 @@
+services:
+  # ==============================================================================
+  # Relational Database: PostgreSQL 16
+  # ==============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: thehub-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-thehub}
+      POSTGRES_USER: ${POSTGRES_USER:-thehub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-thehub123}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-thehub} -d ${POSTGRES_DB:-thehub}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - thehub-network
+
+  # ==============================================================================
+  # In-Memory Cache & Rate Limiting: Redis 7
+  # ==============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: thehub-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - thehub-network
+
+  # ==============================================================================
+  # Event Streaming Broker: Apache Kafka (KRaft Mode - Modern, No ZooKeeper)
+  # ==============================================================================
+  kafka:
+    image: apache/kafka:latest
+    container_name: thehub-kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka_data:/tmp/kraft-combined-logs
+    networks:
+      - thehub-network
+
+  # ==============================================================================
+  # Kafka UI: Visual topic, consumer, and message management
+  # ==============================================================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: thehub-kafka-ui
+    restart: unless-stopped
+    ports:
+      - "${KAFKA_UI_PORT:-8085}:8080"
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=thehub-cluster
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - DYNAMIC_CONFIG_ENABLED=true
+    depends_on:
+      kafka:
+        condition: service_started
+    networks:
+      - thehub-network
+
+  # ==============================================================================
+  # Backend API: Spring Boot 3 + Java 21
+  # ==============================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: thehub-backend
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-thehub}
+      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER:-thehub}
+      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD:-thehub123}
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - JWT_SECRET=${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      - CORS_ALLOWED_ORIGINS=*
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - thehub-network
+
+  # ==============================================================================
+  # Frontend Application: React 18 + Vite (Served via Nginx)
+  # ==============================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: thehub-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - thehub-network
+
+  # ==============================================================================
+  # Reverse Proxy: Nginx (VPS & Production Gateway)
+  # ==============================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: thehub-gateway
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - thehub-network
+
+networks:
+  thehub-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  kafka_data:

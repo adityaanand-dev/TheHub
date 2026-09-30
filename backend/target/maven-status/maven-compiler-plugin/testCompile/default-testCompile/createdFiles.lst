@@ -1,0 +1,5 @@
+com\thehub\service\OrderServiceTest.class
+com\thehub\LegacyApiIntegrationTest.class
+com\thehub\TheHubApplicationTests.class
+com\thehub\service\ProjectServiceTest.class
+com\thehub\service\ServiceListingServiceTest.class
